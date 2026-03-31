@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//////////////////////
+// ENUMS
+//////////////////////
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  SPLIT
+}
+
+//////////////////////
+// MODELS
+//////////////////////
+model Organization {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  address   String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  users      User[]
+  categories Category[]
+  products   Product[]
+  sales      Sale[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  orgId          String       // <--- The Scope
+  organization   Organization @relation(fields: [orgId], references: [id])
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(STAFF)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  fcmToken String?
+
+  sales     Sale[]
+}
+
+model Category {
+  id             String       @id @default(uuid())
+  orgId          String
+  organization   Organization @relation(fields: [orgId], references: [id])
+  
+  name           String
+  products       Product[]
+
+  // A category name only needs to be unique WITHIN a store
+  @@unique([orgId, name]) 
+}
+model Product {
+  id             String       @id @default(uuid())
+  orgId          String
+  organization   Organization @relation(fields: [orgId], references: [id])
+
+  name           String
+  price          Decimal      @db.Decimal(10,2)
+  costPrice      Decimal?     @db.Decimal(10,2)
+  barcode        String       
+  qrCode         String?      
+  stockQty       Float        @default(0)
+  minStock       Float        @default(5)
+  unit           String       @default("PCS")
+
+  categoryId     String?
+  category       Category?    @relation(fields: [categoryId], references: [id])
+
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  saleItems      SaleItem[]
+
+  // 🔥 SAAS CORE: Barcode is unique PER STORE
+  @@unique([orgId, barcode])
+  @@index([orgId])
+  @@index([barcode])
+  @@index([name])
+}
+
+model Sale {
+  id             String       @id @default(uuid())
+  orgId          String
+  organization   Organization @relation(fields: [orgId], references: [id])
+
+  billNumber     Int          
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+
+  totalAmount    Decimal      @db.Decimal(10,2)
+  discount       Float        @default(0)
+  finalAmount    Decimal      @db.Decimal(10,2)
+
+  paymentMode    PaymentMode
+  createdAt      DateTime     @default(now())
+
+  items          SaleItem[]
+
+  // Bill number is unique per store
+  @@unique([orgId, billNumber])
+}
+model SaleItem {
+  id             String   @id @default(uuid())
+  saleId         String
+  productId      String
+  quantity       Float
+  price          Decimal  @db.Decimal(10,2)
+
+  sale           Sale     @relation(fields: [saleId], references: [id])
+  product        Product  @relation(fields: [productId], references: [id])
+}
