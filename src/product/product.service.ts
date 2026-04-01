@@ -10,21 +10,28 @@ import { Prisma } from '@prisma/client';
 @Injectable()
 export class ProductService {
   constructor(private prisma: PrismaService) {}
-
+  private generateBarcode(): string {
+    const prefix = '27'; // optional store prefix
+    const random = Math.floor(1000000000 + Math.random() * 9000000000); // 10 digits
+    return `${prefix}${random}`; // total ~12 digits
+  }
   /**
    * Create Product - Scoped to Org
    */
   async create(data: any, orgId: string) {
     try {
+      const barcode = data.barcode || this.generateBarcode();
+
       return await this.prisma.product.create({
         data: {
           ...data,
-          orgId, // Explicitly set the organization
+          barcode,
+          orgId,
         },
         include: { category: true },
       });
     } catch (error) {
-      if (error.code === 'P2002') {
+      if (error?.code === 'P2002') {
         throw new ConflictException(
           'A product with this barcode already exists in your store.',
         );
@@ -32,7 +39,6 @@ export class ProductService {
       throw error;
     }
   }
-
   /**
    * Scoped Search & Pagination
    */

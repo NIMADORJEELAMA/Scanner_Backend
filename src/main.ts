@@ -12,6 +12,7 @@ async function bootstrap() {
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:3001',
+        'http://192.168.1.9:3000',
         'https://bms-frontend-black.vercel.app',
         'https://hilltoptourism.in',
         'https://staging.hilltoptourism.in',
