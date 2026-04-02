@@ -11,6 +11,7 @@ import { ProductService } from './product/product.service';
 import { ProductModule } from './product/product.module';
 import { SaleService } from './sale/sale.service';
 import { SaleModule } from './sale/sale.module';
+import { CategoryModule } from './category/category.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SaleModule } from './sale/sale.module';
     AdminModule,
     ProductModule,
     SaleModule,
+    CategoryModule,
 
     QzModule,
   ],
