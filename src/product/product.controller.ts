@@ -53,8 +53,6 @@ export class ProductController {
   @UseGuards(JwtAuthGuard) // MUST be here
   @Get('barcode/:barcode')
   async findByBarcode(@Param('barcode') barcode: string, @Req() req: any) {
-    console.log('User from Req:', req.user); // DEBUG: Ensure orgId is here
-
     if (!req.user?.orgId) {
       throw new UnauthorizedException('Organization ID missing from token');
     }
