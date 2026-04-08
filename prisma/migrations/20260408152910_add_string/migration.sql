@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Sale" ALTER COLUMN "billNumber" SET DATA TYPE TEXT;

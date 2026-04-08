@@ -10,65 +10,99 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 export class SaleService {
   constructor(private prisma: PrismaService) {}
 
-  // sale.service.ts
-
-  async create(dto: any, userId: string, orgId: string) {
-    const { items, paymentMode, totalAmount, discount, finalAmount } = dto;
+  async create(dto: CreateSaleDto, userId: string, orgId: string) {
+    const {
+      items,
+      paymentMode,
+      totalAmount,
+      discount,
+      taxAmount,
+      gstPercentage,
+      finalAmount,
+    } = dto;
 
     return await this.prisma.$transaction(async (tx) => {
-      // 1. Extract all product IDs from the request
-      const productIds = items.map((item: any) => item.productId);
-
-      // 2. Check if all these products actually exist in the DB
-      const existingProducts = await tx.product.findMany({
-        where: {
-          id: { in: productIds },
-          orgId: orgId, // Safety check: ensure products belong to this org
-        },
-        select: { id: true },
+      // 1. Validate Products Exist
+      const productIds = items.map((i) => i.productId);
+      const existingProductsCount = await tx.product.count({
+        where: { id: { in: productIds }, orgId },
       });
 
-      if (existingProducts.length !== items.length) {
-        throw new NotFoundException(
-          'One or more products were not found in your inventory.',
-        );
+      if (existingProductsCount !== items.length) {
+        throw new NotFoundException('One or more products were not found.');
       }
 
-      // 3. Logic for Bill Number
+      // 2. Atomic Bill Number Generation
       const lastSale = await tx.sale.findFirst({
         where: { orgId },
-        orderBy: { billNumber: 'desc' },
+        orderBy: { createdAt: 'desc' },
+        select: { billNumber: true },
       });
-      const nextBillNumber = lastSale ? lastSale.billNumber + 1 : 1001;
 
-      // 4. Create the Sale
+      const nextBillNumber = lastSale
+        ? (parseInt(lastSale.billNumber) + 1).toString()
+        : '1001';
+
+      // 3. Create Sale and Line Items
       return await tx.sale.create({
         data: {
           orgId,
-          billNumber: nextBillNumber,
           userId,
+          billNumber: nextBillNumber,
           paymentMode,
           totalAmount,
+          taxAmount,
           discount,
+          gstPercentage,
           finalAmount,
           items: {
-            create: items.map((item: any) => ({
+            create: items.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,
               price: item.price,
             })),
           },
         },
+        include: {
+          items: {
+            include: { product: { select: { name: true } } },
+          },
+        },
       });
     });
   }
 
-  // Get all sales for reporting
-  async findAll() {
+  async findAll(
+    orgId: string,
+    query: { search?: string; startDate?: string; endDate?: string },
+  ) {
+    const { search, startDate, endDate } = query;
+
     return this.prisma.sale.findMany({
+      where: {
+        orgId,
+        ...(search && {
+          OR: [
+            { billNumber: { contains: search } },
+            { user: { name: { contains: search, mode: 'insensitive' } } },
+          ],
+        }),
+        ...((startDate || endDate) && {
+          createdAt: {
+            ...(startDate && { gte: new Date(startDate) }),
+            ...(endDate && {
+              lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+            }),
+          },
+        }),
+      },
       include: {
         user: { select: { name: true } },
-        items: { include: { product: { select: { name: true } } } },
+        items: {
+          include: {
+            product: { select: { name: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });

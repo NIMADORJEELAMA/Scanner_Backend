@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Sale" ADD COLUMN     "gstPercentage" DOUBLE PRECISION NOT NULL DEFAULT 0;

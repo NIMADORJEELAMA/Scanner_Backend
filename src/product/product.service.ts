@@ -131,9 +131,7 @@ export class ProductService {
       });
       return product;
     } catch (error) {
-      throw new BadRequestException(
-        'Failed to update product. Access denied or not found.',
-      );
+      throw new BadRequestException('Failed to update product. ');
     }
   }
 
