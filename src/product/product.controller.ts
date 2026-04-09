@@ -16,6 +16,7 @@ import {
 import { ProductService } from './product.service';
 import { Prisma } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/jwt.guard';
+import { BulkProductDto } from './dto/bulk-product.dto';
 
 @UseGuards(JwtAuthGuard) // Apply to the whole controller
 @Controller('products')
@@ -77,7 +78,19 @@ export class ProductController {
    * Soft Delete
    */
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: any) {
-    return this.productService.deactivate(id, req.user.orgId);
+  async remove(@Param('id') id: string, @Req() req: any) {
+    return this.productService.deleteOrDeactivate(id, req.user.orgId);
+  }
+
+  // src/product/product.controller.ts
+
+  @Post('bulk')
+  async bulkUpload(
+    @Body() dto: BulkProductDto,
+    @Req() req: any, // Assuming your AuthGuard attaches user info to req
+  ) {
+    const userId = req.user.id;
+    const orgId = req.user.orgId;
+    return this.productService.createBulk(dto, userId, orgId);
   }
 }

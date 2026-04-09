@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { BulkProductDto } from './dto/bulk-product.dto';
 
 @Injectable()
 export class ProductService {
@@ -118,9 +119,7 @@ export class ProductService {
       throw new NotFoundException('Product not found in this store');
     return product;
   }
-  /**
-   * Update - Scoped
-   */
+
   async update(id: string, orgId: string, data: Prisma.ProductUpdateInput) {
     try {
       // Using updateMany allows us to include orgId in the where clause
@@ -134,18 +133,78 @@ export class ProductService {
       throw new BadRequestException('Failed to update product. ');
     }
   }
+  async deleteOrDeactivate(id: string, orgId: string) {
+    // 1. Fetch product with count of related sale items
+    const product = await this.prisma.product.findUnique({
+      where: { id, orgId },
+      include: {
+        _count: {
+          select: { saleItems: true }, // Using the exact relation name from your schema
+        },
+      },
+    });
 
-  /**
-   * Soft Delete - Scoped
-   */
-  async deactivate(id: string, orgId: string) {
+    if (!product) {
+      throw new NotFoundException('Product not found.');
+    }
+
     try {
-      return await this.prisma.product.update({
+      // 2. Logic: If product has historical sales, de-activate (Soft Delete)
+      if (product._count.saleItems > 0) {
+        return await this.prisma.product.update({
+          where: { id, orgId },
+          data: { isActive: false },
+        });
+      }
+
+      // 3. Otherwise, hard delete from database
+      return await this.prisma.product.delete({
         where: { id, orgId },
-        data: { isActive: false },
       });
     } catch (error) {
-      throw new BadRequestException('Failed to deactivate product.');
+      throw new BadRequestException(
+        'Action failed. The product cannot be removed.',
+      );
     }
+  }
+
+  async createBulk(dto: BulkProductDto, userId: string, orgId: string) {
+    const { products } = dto;
+
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Fix the first error: Ensure barcodes is strictly string[]
+      // We use .filter((b): b is string => !!b) to satisfy the TS compiler
+      const barcodes: string[] = products
+        .map((p) => p.barcode)
+        .filter((b): b is string => !!b);
+
+      if (barcodes.length > 0) {
+        const existingBarcode = await tx.product.findFirst({
+          // Now 'barcodes' is guaranteed to be string[]
+          where: { barcode: { in: barcodes }, orgId },
+        });
+        if (existingBarcode) {
+          throw new BadRequestException(
+            `Barcode ${existingBarcode.barcode} already exists.`,
+          );
+        }
+      }
+
+      // 2. Fix the second error: Handle undefined barcode in mapping
+      return await tx.product.createMany({
+        data: products.map((p) => ({
+          name: p.name,
+          price: p.price,
+          costPrice: p.costPrice,
+          stockQty: p.stockQty,
+          unit: p.unit,
+          categoryId: p.categoryId,
+          orgId: orgId,
+          // Convert undefined to null or an empty string to satisfy Prisma/TS
+          barcode: p.barcode ?? '',
+        })),
+        skipDuplicates: false,
+      });
+    });
   }
 }
