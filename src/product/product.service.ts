@@ -46,17 +46,20 @@ export class ProductService {
   async findAll(
     orgId: string,
     params: {
-      skip?: number;
-      take?: number;
+      skip?: string | number;
+      take?: string | number;
       search?: string;
       categoryId?: string;
       isActive?: boolean;
     },
   ) {
-    const { skip, take, search, categoryId, isActive } = params;
+    // Ensure we are working with numbers
+    const skip = Number(params.skip) || 0;
+    const take = Number(params.take) || 20;
+    const { search, categoryId, isActive } = params;
 
     const where: Prisma.ProductWhereInput = {
-      orgId, // MANDATORY: Only show products for this store
+      orgId,
       isActive: isActive ?? true,
       ...(categoryId && { categoryId }),
       ...(search && {
@@ -71,8 +74,8 @@ export class ProductService {
       this.prisma.product.count({ where }),
       this.prisma.product.findMany({
         where,
-        skip,
-        take,
+        skip, // Now safely a number
+        take, // Now safely a number
         include: { category: { select: { name: true } } },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -80,11 +83,10 @@ export class ProductService {
 
     return {
       total,
-      pages: Math.ceil(total / (take || 10)),
+      pages: Math.ceil(total / take),
       items,
     };
   }
-
   /**
    * Find One - Scoped
    */

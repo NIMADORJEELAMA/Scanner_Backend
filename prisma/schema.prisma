@@ -129,6 +129,8 @@ model SaleItem {
   productId String
   quantity  Float
   price     Decimal @db.Decimal(10, 2)
+  lineDiscount Float   @default(0) // New field
+  taxRate      Float   @default(0) // New field
 
   sale    Sale    @relation(fields: [saleId], references: [id])
   product Product @relation(fields: [productId], references: [id])

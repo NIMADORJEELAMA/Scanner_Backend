@@ -17,6 +17,14 @@ export class CreateSaleItemDto {
 
   @IsNumber()
   price: number;
+
+  @IsOptional()
+  @IsNumber()
+  lineDiscount: number;
+
+  @IsOptional()
+  @IsNumber()
+  taxRate: number;
 }
 
 export class CreateSaleDto {

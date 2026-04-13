@@ -22,17 +22,35 @@ export class SaleService {
     } = dto;
 
     return await this.prisma.$transaction(async (tx) => {
-      // 1. Validate Products Exist
-      const productIds = items.map((i) => i.productId);
-      const existingProductsCount = await tx.product.count({
-        where: { id: { in: productIds }, orgId },
-      });
+      // 1. Validate Products & Check Stock
+      for (const item of items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId, orgId },
+          select: { stockQty: true, name: true },
+        });
 
-      if (existingProductsCount !== items.length) {
-        throw new NotFoundException('One or more products were not found.');
+        if (!product) {
+          throw new NotFoundException(`Product ${item.productId} not found.`);
+        }
+
+        // if (product.stockQty < item.quantity) {
+        //   throw new BadRequestException(
+        //     `Insufficient stock for ${product.name}. Available: ${product.stockQty}, Requested: ${item.quantity}`,
+        //   );
+        // }
+
+        // 2. Deduct Stock
+        await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            stockQty: {
+              decrement: item.quantity,
+            },
+          },
+        });
       }
 
-      // 2. Atomic Bill Number Generation
+      // 3. Atomic Bill Number Generation
       const lastSale = await tx.sale.findFirst({
         where: { orgId },
         orderBy: { createdAt: 'desc' },
@@ -43,7 +61,7 @@ export class SaleService {
         ? (parseInt(lastSale.billNumber) + 1).toString()
         : '1001';
 
-      // 3. Create Sale and Line Items
+      // 4. Create Sale and Line Items
       return await tx.sale.create({
         data: {
           orgId,
@@ -60,6 +78,8 @@ export class SaleService {
               productId: item.productId,
               quantity: item.quantity,
               price: item.price,
+              lineDiscount: item.lineDiscount || 0,
+              taxRate: item.taxRate || 0,
             })),
           },
         },
