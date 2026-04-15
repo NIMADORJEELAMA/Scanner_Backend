@@ -10,45 +10,57 @@ import { Type } from 'class-transformer';
 
 export class CreateSaleItemDto {
   @IsString()
-  productId: string;
+  productId?: string;
 
   @IsNumber()
-  quantity: number;
+  quantity?: number;
 
   @IsNumber()
-  price: number;
-
-  @IsOptional()
-  @IsNumber()
-  lineDiscount: number;
+  price?: number;
 
   @IsOptional()
   @IsNumber()
-  taxRate: number;
+  lineDiscount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  taxRate?: number;
 }
 
 export class CreateSaleDto {
-  @IsEnum(['CASH', 'UPI', 'CARD', 'SPLIT'])
-  paymentMode: 'CASH' | 'UPI' | 'CARD' | 'SPLIT';
+  @IsEnum(['CASH', 'ONLINE', 'CARD', 'SPLIT'])
+  paymentMode?: 'CASH' | 'ONLINE' | 'CARD' | 'SPLIT';
 
   @IsNumber()
-  totalAmount: number;
+  @IsOptional()
+  amountCash?: number;
 
   @IsNumber()
-  discount: number;
+  @IsOptional()
+  amountOnline?: number;
 
   @IsNumber()
-  taxAmount: number; // The calculated tax amount (e.g., 507.6)
+  @IsOptional()
+  amountCard?: number;
+
+  @IsNumber()
+  totalAmount?: number;
+
+  @IsNumber()
+  discount?: number;
+
+  @IsNumber()
+  taxAmount?: number; // The calculated tax amount (e.g., 507.6)
 
   @IsNumber()
   @IsOptional()
   gstPercentage?: number; // The rate used (e.g., 10)
 
   @IsNumber()
-  finalAmount: number;
+  finalAmount?: number;
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateSaleItemDto)
-  items: CreateSaleItemDto[];
+  items?: CreateSaleItemDto[];
 }

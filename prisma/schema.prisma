@@ -18,9 +18,10 @@ enum UserRole {
 
 enum PaymentMode {
   CASH
-  UPI
+  ONLINE
   CARD
   SPLIT
+  CREDIT
 }
 
 //////////////////////
@@ -112,6 +113,12 @@ model Sale {
 
   discount    Float   @default(0)
   finalAmount Decimal @db.Decimal(10, 2)
+  amountCash    Decimal      @default(0) @db.Decimal(10, 2)
+  amountOnline  Decimal      @default(0) @db.Decimal(10, 2) // UPI
+  amountCard    Decimal      @default(0) @db.Decimal(10, 2)
+  
+  // Optional: For CREDIT/Khata sales
+  amountDue     Decimal      @default(0) @db.Decimal(10, 2)
 
   paymentMode PaymentMode
   createdAt   DateTime    @default(now())
