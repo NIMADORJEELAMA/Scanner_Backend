@@ -68,6 +68,14 @@ export class UsersService {
         email: true,
         role: true,
         isActive: true,
+        orgId: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            // Add other org fields you need here (e.g., address, phone)
+          },
+        },
       },
     });
   }
@@ -87,6 +95,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
+        organization: true,
         // Only include relations that actually exist in your schema.prisma
         sales: {
           orderBy: { createdAt: 'desc' },

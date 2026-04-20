@@ -54,7 +54,25 @@ model User {
 
   sales Sale[]
 }
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  orgId     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  // 1. Unique constraint for data integrity
+  @@unique([phone, orgId]) 
+
+  // 2. Composite index for organization-specific lookups
+  // This speeds up: SELECT * FROM Customer WHERE orgId = 'xyz' AND name LIKE 'abc%'
+  @@index([orgId, name])
+  
+  // 3. Phone lookup index
+  // This speeds up: SELECT * FROM Customer WHERE orgId = 'xyz' AND phone = '12345'
+  @@index([orgId, phone])
+}
 model Category {
   id           String       @id @default(uuid())
   orgId        String
