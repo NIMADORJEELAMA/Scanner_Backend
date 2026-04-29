@@ -48,7 +48,7 @@ async function bootstrap() {
   const PORT = 3000;
   const HOST = '0.0.0.0';
 
-  await app.listen(PORT, HOST);
+  await app.listen(3000, '0.0.0.0');
 
   // await app.listen(3000, '0.0.0.0'); // while running local
   // await app.listen(process.env.PORT || 3000);    // for staging and production

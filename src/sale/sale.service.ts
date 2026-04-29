@@ -133,56 +133,46 @@ export class SaleService {
   async getSalesReport(orgId: string, startDate: string, endDate: string) {
     const start = new Date(startDate);
     const end = new Date(new Date(endDate).setHours(23, 59, 59, 999));
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new BadRequestException('Invalid date range');
-    }
-    // 1. Overall Totals
-    const totals = await this.prisma.sale.aggregate({
-      where: { orgId, createdAt: { gte: start, lte: end } },
-      _sum: {
-        finalAmount: true,
-        totalAmount: true,
-        taxAmount: true,
-        discount: true,
-      },
-      _count: { id: true },
-    });
 
-    // 2. Revenue by Payment Mode (For Donut/Pie Chart)
-    const paymentBreakdown = await this.prisma.sale.groupBy({
-      by: ['paymentMode'],
-      where: { orgId, createdAt: { gte: start, lte: end } },
-      _sum: { finalAmount: true },
-    });
-
-    // 3. Top 5 Products (For Bar Chart)
-    const topProducts = await this.prisma.saleItem.groupBy({
-      by: ['productId'],
-      where: {
-        sale: { orgId, createdAt: { gte: start, lte: end } },
-      },
-      _sum: { quantity: true, price: true },
-      orderBy: { _sum: { quantity: 'desc' } },
-      take: 5,
-    });
-
-    // Enrich top products with names
-    const topProductsWithNames = await Promise.all(
-      topProducts.map(async (item) => {
-        const product = await this.prisma.product.findUnique({
-          where: { id: item.productId },
-          select: { name: true },
-        });
-        return { ...item, name: product?.name };
+    // 1. Fetch Totals & Payment Breakdown (Parallelized)
+    const [totals, paymentBreakdown, topProducts] = await Promise.all([
+      this.prisma.sale.aggregate({
+        where: { orgId, createdAt: { gte: start, lte: end } },
+        _sum: { finalAmount: true },
+        _count: { id: true },
       }),
-    );
+      this.prisma.sale.groupBy({
+        by: ['paymentMode'],
+        where: { orgId, createdAt: { gte: start, lte: end } },
+        _sum: { finalAmount: true },
+      }),
+      this.prisma.saleItem.groupBy({
+        by: ['productId'],
+        where: { sale: { orgId, createdAt: { gte: start, lte: end } } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    // 2. OPTIMIZED: Fetch all product names in ONE query using 'in'
+    const productIds = topProducts.map((p) => p.productId);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true },
+    });
+
+    const topProductsWithNames = topProducts.map((tp) => ({
+      ...tp,
+      name: products.find((p) => p.id === tp.productId)?.name || 'Unknown',
+    }));
 
     return {
       summary: {
         totalRevenue: totals._sum.finalAmount || 0,
         totalSalesCount: totals._count.id || 0,
         averageOrderValue: totals._count.id
-          ? Number(totals._sum.finalAmount || 0) / totals._count.id
+          ? Number(totals._sum.finalAmount) / totals._count.id
           : 0,
       },
       paymentBreakdown,
