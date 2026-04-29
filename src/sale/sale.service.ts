@@ -130,4 +130,111 @@ export class SaleService {
       orderBy: { createdAt: 'desc' },
     });
   }
+  async getSalesReport(orgId: string, startDate: string, endDate: string) {
+    const start = new Date(startDate);
+    const end = new Date(new Date(endDate).setHours(23, 59, 59, 999));
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new BadRequestException('Invalid date range');
+    }
+    // 1. Overall Totals
+    const totals = await this.prisma.sale.aggregate({
+      where: { orgId, createdAt: { gte: start, lte: end } },
+      _sum: {
+        finalAmount: true,
+        totalAmount: true,
+        taxAmount: true,
+        discount: true,
+      },
+      _count: { id: true },
+    });
+
+    // 2. Revenue by Payment Mode (For Donut/Pie Chart)
+    const paymentBreakdown = await this.prisma.sale.groupBy({
+      by: ['paymentMode'],
+      where: { orgId, createdAt: { gte: start, lte: end } },
+      _sum: { finalAmount: true },
+    });
+
+    // 3. Top 5 Products (For Bar Chart)
+    const topProducts = await this.prisma.saleItem.groupBy({
+      by: ['productId'],
+      where: {
+        sale: { orgId, createdAt: { gte: start, lte: end } },
+      },
+      _sum: { quantity: true, price: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: 5,
+    });
+
+    // Enrich top products with names
+    const topProductsWithNames = await Promise.all(
+      topProducts.map(async (item) => {
+        const product = await this.prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { name: true },
+        });
+        return { ...item, name: product?.name };
+      }),
+    );
+
+    return {
+      summary: {
+        totalRevenue: totals._sum.finalAmount || 0,
+        totalSalesCount: totals._count.id || 0,
+        averageOrderValue: totals._count.id
+          ? Number(totals._sum.finalAmount || 0) / totals._count.id
+          : 0,
+      },
+      paymentBreakdown,
+      topProducts: topProductsWithNames,
+    };
+  }
+  async getSalesTimeline(orgId: string, date: string) {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+
+    if (isNaN(start.getTime())) {
+      throw new BadRequestException('Invalid date');
+    }
+
+    // Fetch all sales for the day
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        orgId,
+        createdAt: { gte: start, lte: end },
+      },
+      select: {
+        createdAt: true,
+        finalAmount: true,
+      },
+    });
+
+    // Initialize 24-hour slots (0-23)
+    const timeline = Array.from({ length: 24 }, (_, hour) => ({
+      hour: `${hour}:00`,
+      orderCount: 0,
+      revenue: 0,
+    }));
+
+    // Populate slots
+    sales.forEach((sale) => {
+      const hour = new Date(sale.createdAt).getHours();
+      timeline[hour].orderCount += 1;
+      timeline[hour].revenue += Number(sale.finalAmount || 0);
+    });
+
+    // Find the peak hour
+    const peakHourData = [...timeline].sort(
+      (a, b) => b.orderCount - a.orderCount,
+    )[0];
+
+    return {
+      date,
+      timeline,
+      peakHour: peakHourData.orderCount > 0 ? peakHourData : null,
+    };
+  }
 }

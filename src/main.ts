@@ -12,7 +12,7 @@ async function bootstrap() {
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:3001',
-        'http://192.168.1.6:3000',
+        'http://192.168.1.20:3000',
         'https://bms-frontend-black.vercel.app',
         'https://hilltoptourism.in',
         'https://staging.hilltoptourism.in',
@@ -45,8 +45,12 @@ async function bootstrap() {
   //   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   //   credentials: true,
   // });
+  const PORT = 3000;
+  const HOST = '0.0.0.0';
 
-  await app.listen(3000, '0.0.0.0'); // while running local
+  await app.listen(PORT, HOST);
+
+  // await app.listen(3000, '0.0.0.0'); // while running local
   // await app.listen(process.env.PORT || 3000);    // for staging and production
   console.log(`Application is running on: ${await app.getUrl()}`);
 }

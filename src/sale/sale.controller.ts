@@ -33,4 +33,21 @@ export class SaleController {
     const orgId = req.user.orgId; // Security: Only fetch sales for the user's organization
     return this.saleService.findAll(orgId, { search, startDate, endDate });
   }
+  @Get('report')
+  async getReport(
+    @Query('orgId') orgId: string,
+    @Query('start') start: string,
+    @Query('end') end: string,
+  ) {
+    return this.saleService.getSalesReport(orgId, start, end);
+  }
+  // backend/src/sales/sales.controller.ts
+
+  @Get('timeline') // This must match the frontend call
+  async getTimeline(
+    @Query('orgId') orgId: string,
+    @Query('date') date: string,
+  ) {
+    return this.saleService.getSalesTimeline(orgId, date);
+  }
 }
