@@ -134,39 +134,108 @@ export class SaleService {
     const start = new Date(startDate);
     const end = new Date(new Date(endDate).setHours(23, 59, 59, 999));
 
-    // 1. Fetch Totals & Payment Breakdown (Parallelized)
-    const [totals, paymentBreakdown, topProducts] = await Promise.all([
-      this.prisma.sale.aggregate({
-        where: { orgId, createdAt: { gte: start, lte: end } },
-        _sum: { finalAmount: true },
-        _count: { id: true },
-      }),
-      this.prisma.sale.groupBy({
-        by: ['paymentMode'],
-        where: { orgId, createdAt: { gte: start, lte: end } },
-        _sum: { finalAmount: true },
-      }),
-      this.prisma.saleItem.groupBy({
-        by: ['productId'],
-        where: { sale: { orgId, createdAt: { gte: start, lte: end } } },
-        _sum: { quantity: true },
-        orderBy: { _sum: { quantity: 'desc' } },
-        take: 5,
-      }),
-    ]);
+    // 1. Fetch Totals, Payments, Top Products, and All Products Sold in Parallel
+    const [totals, paymentBreakdown, topProducts, rawAllItemsSold] =
+      await Promise.all([
+        this.prisma.sale.aggregate({
+          where: { orgId, createdAt: { gte: start, lte: end } },
+          _sum: { finalAmount: true },
+          _count: { id: true },
+        }),
+        this.prisma.sale.groupBy({
+          by: ['paymentMode'],
+          where: { orgId, createdAt: { gte: start, lte: end } },
+          _sum: { finalAmount: true },
+        }),
+        this.prisma.saleItem.groupBy({
+          by: ['productId'],
+          where: { sale: { orgId, createdAt: { gte: start, lte: end } } },
+          _sum: { quantity: true, price: true },
+          orderBy: { _sum: { quantity: 'desc' } },
+          take: 5, // Kept for your frontend "Top Selling Items" bar chart
+        }),
+        this.prisma.saleItem.groupBy({
+          by: ['productId'],
+          where: { sale: { orgId, createdAt: { gte: start, lte: end } } },
+          _sum: { quantity: true, price: true },
+          orderBy: { _sum: { quantity: 'desc' } },
+        }),
+      ]);
 
-    // 2. OPTIMIZED: Fetch all product names in ONE query using 'in'
-    const productIds = topProducts.map((p) => p.productId);
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds } },
-      select: { id: true, name: true },
+    // 2. Collect unique product IDs across both lists to make one single query
+    const distinctProductIds = Array.from(
+      new Set([
+        ...topProducts.map((p) => p.productId),
+        ...rawAllItemsSold.map((p) => p.productId),
+      ]),
+    );
+
+    // 3. Fetch all required Product details along with their nested Categories
+    const productsWithCategories = await this.prisma.product.findMany({
+      where: { id: { in: distinctProductIds } },
+      select: {
+        id: true,
+        name: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
 
+    // Create lookups to easily reference names later
+    const productLookup = new Map(productsWithCategories.map((p) => [p.id, p]));
+
+    // 4. Format Top Products List
     const topProductsWithNames = topProducts.map((tp) => ({
       ...tp,
-      name: products.find((p) => p.id === tp.productId)?.name || 'Unknown',
+      name: productLookup.get(tp.productId)?.name || 'Unknown',
     }));
 
+    // 5. Format Comprehensive List of All Items Sold
+    const allItemsSold = rawAllItemsSold.map((item) => {
+      const matchedProduct = productLookup.get(item.productId);
+      return {
+        productId: item.productId,
+        name: matchedProduct?.name || 'Unknown',
+        categoryName: matchedProduct?.category?.name || 'Uncategorized',
+        categoryId: matchedProduct?.category?.id || null,
+        totalQuantitySold: item._sum.quantity || 0,
+        totalRevenueGenerated: item._sum.price || 0,
+      };
+    });
+
+    // 6. Dynamically Generate Category Sales Breakdown from items sold mapping
+    const categoryBreakdownMap: {
+      [key: string]: {
+        categoryId: string | null;
+        name: string;
+        quantity: number;
+        revenue: number;
+      };
+    } = {};
+
+    allItemsSold.forEach((item) => {
+      const catName = item.categoryName;
+      if (!categoryBreakdownMap[catName]) {
+        categoryBreakdownMap[catName] = {
+          categoryId: item.categoryId,
+          name: catName,
+          quantity: 0,
+          revenue: 0,
+        };
+      }
+      categoryBreakdownMap[catName].quantity += item.totalQuantitySold;
+      categoryBreakdownMap[catName].revenue += Number(
+        item.totalRevenueGenerated,
+      );
+    });
+
+    const categoryBreakdown = Object.values(categoryBreakdownMap);
+
+    // 7. Composite Payload Delivery Object
     return {
       summary: {
         totalRevenue: totals._sum.finalAmount || 0,
@@ -176,7 +245,9 @@ export class SaleService {
           : 0,
       },
       paymentBreakdown,
-      topProducts: topProductsWithNames,
+      topProducts: topProductsWithNames, // Used for your 5-column BarChart component
+      allItemsSold, // Full historical listing of items dropped
+      categoryBreakdown, // High-level analytics metrics split by category groupings
     };
   }
   async getSalesTimeline(orgId: string, date: string) {
