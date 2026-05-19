@@ -23,6 +23,11 @@ enum PaymentMode {
   SPLIT
   CREDIT
 }
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
 
 //////////////////////
 // MODELS
@@ -38,6 +43,9 @@ model Organization {
   categories Category[]
   products   Product[]
   sales      Sale[]
+
+  suppliers    Supplier[]
+  purchases    Purchase[]
 }
 
 model User {
@@ -51,8 +59,10 @@ model User {
   isActive     Boolean      @default(true)
   createdAt    DateTime     @default(now())
   fcmToken     String?
+  
 
   sales Sale[]
+  purchases    Purchase[]
 }
 model Customer {
   id        String   @id @default(uuid())
@@ -107,8 +117,9 @@ model Product {
   updatedAt DateTime @updatedAt
 
   saleItems SaleItem[]
-
-  // 🔥 SAAS CORE: Barcode is unique PER STORE
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  purchaseItems PurchaseItem[]
   @@unique([id, orgId])
   @@unique([orgId, barcode])
   @@index([orgId])
@@ -159,4 +170,78 @@ model SaleItem {
 
   sale    Sale    @relation(fields: [saleId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+}
+
+model Purchase {
+  id           String       @id @default(uuid())
+  orgId        String
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  supplierId   String
+  supplier     Supplier     @relation(fields: [supplierId], references: [id])
+
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+
+  invoiceNo    String?      // Supplier's bill/invoice number
+  
+  totalAmount  Decimal      @db.Decimal(10, 2)
+  taxAmount    Float        @default(0)
+  discount     Float        @default(0)
+  finalAmount  Decimal      @db.Decimal(10, 2)
+  
+  amountPaid   Decimal      @default(0) @db.Decimal(10, 2)
+  amountDue    Decimal      @default(0) @db.Decimal(10, 2)
+  paymentMode  PaymentMode?
+
+  status       PurchaseStatus @default(COMPLETED)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  items        PurchaseItem[]
+
+  // Ensure a supplier's invoice isn't entered twice in the same store
+  @@unique([orgId, supplierId, invoiceNo])
+  @@index([orgId])
+}
+
+model PurchaseItem {
+  id           String   @id @default(uuid())
+  purchaseId   String
+  purchase     Purchase @relation(fields: [purchaseId], references: [id])
+
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+
+  quantity     Float
+  costPrice    Decimal  @db.Decimal(10, 2)
+  taxRate      Float    @default(0)
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+model Supplier {
+  id           String       @id @default(uuid())
+  orgId        String
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  name         String
+  contactName  String?
+  phone        String?
+  email        String?
+  address      String?
+  gstNumber    String?      // Useful for tax purposes
+  
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relations
+  products     Product[]
+  purchases    Purchase[]
+
+  // A supplier name should be unique within a single store
+  @@unique([orgId, name])
+  @@index([orgId, name])
+  @@index([orgId, phone])
 }

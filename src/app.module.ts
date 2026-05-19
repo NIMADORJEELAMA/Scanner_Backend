@@ -13,6 +13,12 @@ import { SaleService } from './sale/sale.service';
 import { SaleModule } from './sale/sale.module';
 import { CategoryModule } from './category/category.module';
 import { CustomerModule } from './customer/customer.module';
+import { SupplierService } from './supplier/supplier.service';
+import { SupplierController } from './supplier/supplier.controller';
+import { SupplierModule } from './supplier/supplier.module';
+import { PurchaseService } from './purchase/purchase.service';
+import { PurchaseController } from './purchase/purchase.controller';
+import { PurchaseModule } from './purchase/purchase.module';
 
 @Module({
   imports: [
@@ -28,8 +34,13 @@ import { CustomerModule } from './customer/customer.module';
     CustomerModule,
 
     QzModule,
+
+    SupplierModule,
+
+    PurchaseModule,
   ],
-  providers: [SaleService],
+  providers: [SaleService, SupplierService, PurchaseService],
+  controllers: [SupplierController, PurchaseController],
 })
 // export class AppModule {}
 export class AppModule implements OnModuleInit {
